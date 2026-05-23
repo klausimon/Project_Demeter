@@ -20,8 +20,8 @@ class HayDayBot:
         self.template_dir = os.path.join(os.path.dirname(__file__), 'templates')
 
         self.cached_coords = {}
-        self.cached_scales = {}  # Remembers the successful scale for each template
-        self.templates = {}  # Pre-loaded images in memory
+        self.cached_scales = {}
+        self.templates = {}
         self.last_newspaper_time = 0
 
         self._preload_templates()
@@ -35,7 +35,6 @@ class HayDayBot:
         for filename in os.listdir(self.template_dir):
             if filename.endswith(('.jpg', '.png')):
                 path = os.path.join(self.template_dir, filename)
-                # Load in grayscale
                 img = cv2.imread(path, cv2.IMREAD_GRAYSCALE)
                 if img is not None:
                     self.templates[filename] = img
@@ -43,12 +42,10 @@ class HayDayBot:
                     print(f"Failed to load: {filename}")
 
     def update_status(self, text):
-        """Updates the GUI label with the current action."""
         self.ui_label.config(text=f"Status: {text}")
         print(text)
 
     def get_emulator_window(self):
-        """Returns the bounding box of the MEmu window to restrict screen capture area."""
         try:
             windows = gw.getWindowsWithTitle('MEmu')
             if windows:
@@ -59,7 +56,6 @@ class HayDayBot:
         return None
 
     def focus_emulator(self):
-        """Finds the MEmu window and forces it to the absolute front of the OS."""
         self.update_status("Locating MEmu window...")
         win = self.get_emulator_window()
         if win:
@@ -68,16 +64,12 @@ class HayDayBot:
             try:
                 win.activate()
             except Exception:
-                pass  # Windows sometimes blocks programmatic activation
+                pass
             time.sleep(0.5)
         else:
             self.update_status("WARNING: MEmu window not found. Please keep it visible.")
 
     def find_template(self, image_name, threshold=0.8, use_cache=False, scales=None, sort_by=None):
-        """
-        Takes a screenshot of just the emulator and finds the center coordinates.
-        Utilizes grayscale matching and scale caching for massive speed improvements.
-        """
         if scales is None:
             scales = [0.8, 0.9, 1.0, 1.1, 1.2]
 
@@ -90,10 +82,8 @@ class HayDayBot:
 
         template = self.templates[image_name]
 
-        # Optimize Capture Area: Only grab the emulator window
         win = self.get_emulator_window()
         if win:
-            # Ensure boundaries are within monitor bounds
             monitor = {'left': max(0, win.left), 'top': max(0, win.top),
                        'width': win.width, 'height': win.height}
             offset_x, offset_y = monitor['left'], monitor['top']
@@ -103,10 +93,8 @@ class HayDayBot:
 
         screen_data = self.screen_capture.grab(monitor)
         screen = np.array(screen_data)
-        # Convert screen to grayscale for faster processing
         screen_gray = cv2.cvtColor(screen, cv2.COLOR_BGRA2GRAY)
 
-        # Smart Scaling: Try the last successful scale first
         if image_name in self.cached_scales:
             best_past_scale = self.cached_scales[image_name]
             if best_past_scale in scales:
@@ -120,7 +108,6 @@ class HayDayBot:
         successful_scale = None
 
         for scale in scales:
-            # Resize template (much smaller than resizing the whole screen)
             resized_template = cv2.resize(template, (0, 0), fx=scale, fy=scale)
             h, w = resized_template.shape
 
@@ -138,14 +125,12 @@ class HayDayBot:
                     best_w, best_h = w, h
                     successful_scale = scale
 
-                # If we find a very strong match, break early to save CPU
                 if max_val > 0.95:
                     break
 
         if best_match_val >= threshold and best_points:
             screen_height, screen_width = screen_gray.shape
 
-            # GLOBAL TASKBAR DEADZONE
             best_points = [p for p in best_points if p[1] < (screen_height - 60)]
 
             if not best_points:
@@ -163,11 +148,16 @@ class HayDayBot:
                 else:
                     return None
 
-            # SPECIAL SORTING & DEADZONE LOGIC FOR TILES
+            # --- GÜVENLİ ALAN (SAFE ZONE) MANTIĞI ---
             elif image_name in ['soil.jpg', 'ready_wheat.jpg']:
-                # UI DEADZONE: Ignore the Friends button in the bottom-right corner
+                # Ekran görüntüsündeki menüleri ekarte etmek için kenarları maskeliyoruz
+                margin_x = int(screen_width * 0.15)  # Sol ve Sağ %15 iptal (Kasa, Arkadaşlar vs)
+                margin_top = int(screen_height * 0.20)  # Üst %20 iptal (Yıldız, Paralar)
+                margin_bottom = int(screen_height * 0.15)  # Alt %15 iptal
+
                 best_points = [p for p in best_points if
-                               not (p[0] > screen_width * 0.85 and p[1] > screen_height * 0.75)]
+                               (margin_x < p[0] < screen_width - margin_x) and
+                               (margin_top < p[1] < screen_height - margin_bottom)]
 
                 if not best_points:
                     return None
@@ -181,11 +171,9 @@ class HayDayBot:
             else:
                 pt = best_points[0]
 
-            # Adjust coordinates back to absolute screen space
             center_x = pt[0] + (best_w // 2) + offset_x
             center_y = pt[1] + (best_h // 2) + offset_y
 
-            # Cache the successful values
             self.cached_scales[image_name] = successful_scale
             if use_cache:
                 self.cached_coords[image_name] = (center_x, center_y)
@@ -196,12 +184,15 @@ class HayDayBot:
 
     def close_stray_menus(self):
         """Actively hunts for an X button to clear the screen before major actions."""
-        self.update_status("Checking for stray menus...")
-        close_btn = self.find_template('close_x.jpg', threshold=0.8, use_cache=False)
-        if close_btn:
-            self.update_status("Stray menu found. Closing...")
-            pag.click(close_btn[0], close_btn[1])
-            time.sleep(1)
+        self.update_status("Checking for stray menus ('X' button)...")
+        for _ in range(2):
+            close_btn = self.find_template('close_x.jpg', threshold=0.8, use_cache=False)
+            if close_btn:
+                self.update_status("Stray menu found. Closing...")
+                pag.click(close_btn[0], close_btn[1])
+                time.sleep(1)
+            else:
+                break
 
     def sweep_field(self, start_x, start_y):
         self.update_status("Sweeping field (15 tighter passes)...")
@@ -220,7 +211,6 @@ class HayDayBot:
                 current_x -= sweep_dx
                 current_y -= sweep_dy
 
-            # Restrict bounds to typical 1080p to avoid PyAutoGUI crashes
             safe_x = max(10, min(1910, current_x))
             safe_y = max(10, min(1020, current_y))
             pag.moveTo(safe_x, safe_y, duration=0.8)
@@ -294,7 +284,6 @@ class HayDayBot:
             return False
 
         self.update_status("Zooming out...")
-        # Get center of emulator rather than hardcoded 960x540
         win = self.get_emulator_window()
         if win:
             cx, cy = win.left + win.width // 2, win.top + win.height // 2
@@ -318,7 +307,7 @@ class HayDayBot:
         wheat_coords = self.find_template('ready_wheat.jpg', threshold=0.65, sort_by='bottom')
         if not wheat_coords:
             self.update_status("No ready wheat found.")
-            return
+            return False
 
         cx, cy = wheat_coords
 
@@ -331,7 +320,7 @@ class HayDayBot:
         if not sickle_coords:
             self.update_status("WARNING: Sickle not found!")
             pag.click(100, 100)
-            return
+            return False
 
         pag.moveTo(sickle_coords[0], sickle_coords[1])
         time.sleep(0.2)
@@ -342,13 +331,14 @@ class HayDayBot:
         self.sweep_field(cx, cy)
         pag.mouseUp()
         time.sleep(2)
+        return True
 
     def plant_wheat(self):
         self.update_status("Finding bottom-most soil...")
         soil_coords = self.find_template('soil.jpg', threshold=0.7, sort_by='bottom')
         if not soil_coords:
             self.update_status("No soil found to plant.")
-            return
+            return False
 
         cx, cy = soil_coords
 
@@ -361,7 +351,7 @@ class HayDayBot:
         if not seed_coords:
             self.update_status("WARNING: Wheat seed not found!")
             pag.click(100, 100)
-            return
+            return False
 
         pag.moveTo(seed_coords[0], seed_coords[1])
         time.sleep(0.2)
@@ -372,6 +362,7 @@ class HayDayBot:
         self.sweep_field(cx, cy)
         pag.mouseUp()
         time.sleep(1)
+        return True
 
     def find_and_open_shop(self):
         if not self.running: return False
@@ -435,7 +426,7 @@ class HayDayBot:
 
     def sell_in_shop(self):
         if not self.find_and_open_shop():
-            return
+            return False
 
         for _ in range(5):
             if not self.running: break
@@ -494,25 +485,46 @@ class HayDayBot:
         self.close_stray_menus()
         self.update_status("Shop closed.")
         time.sleep(1)
+        return True
 
     def run_bot(self):
         self.running = True
 
         while self.running:
             self.focus_emulator()
-            self.close_stray_menus()
 
+            # --- KAMERA SIFIRLAMA ---
+            self.close_stray_menus()
             if not self.reset_camera():
                 continue
 
-            self.close_stray_menus()
-            self.plant_wheat()
+            # --- EKİM YAPMA (Hata olursa X kapatıp bir adım geri döner) ---
+            success_plant = False
+            for attempt in range(3):
+                if not self.running: break
+                self.close_stray_menus()  # Yanlış açılan menüleri temizler
+                if self.plant_wheat():
+                    success_plant = True
+                    break
+                self.update_status(f"Planting failed. Retrying step ({attempt + 1}/3)...")
+                time.sleep(1)
+
+            if not success_plant:
+                self.update_status("Planting completely failed! Restarting cycle...")
+                continue  # Ancak 3 denemede de başaramazsa kamerayı sıfırlamaya döner
 
             plant_time = time.time()
 
-            self.close_stray_menus()
-            self.sell_in_shop()
+            # --- SATIŞ YAPMA ---
+            for attempt in range(3):
+                if not self.running: break
+                self.close_stray_menus()
+                if self.sell_in_shop():
+                    break
+                self.update_status(f"Selling failed. Retrying step ({attempt + 1}/3)...")
+                time.sleep(1)
 
+            # --- BEKLEME SÜRESİ ---
             elapsed_time = time.time() - plant_time
             remaining_wait = 120 - elapsed_time
 
@@ -522,8 +534,14 @@ class HayDayBot:
 
             if not self.running: break
 
-            self.close_stray_menus()
-            self.harvest_wheat()
+            # --- HASAT YAPMA ---
+            for attempt in range(3):
+                if not self.running: break
+                self.close_stray_menus()
+                if self.harvest_wheat():
+                    break
+                self.update_status(f"Harvest failed. Retrying step ({attempt + 1}/3)...")
+                time.sleep(1)
 
         self.update_status("Bot Stopped.")
 
@@ -541,7 +559,6 @@ def start_bot_thread():
 
 
 def stop_bot_thread():
-    """Signals the thread to stop gracefully via the running flag."""
     bot.running = False
     bot.update_status("Stopping bot... (Will finish current action)")
 
