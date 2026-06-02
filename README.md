@@ -1,15 +1,12 @@
-# Hay Day Computer Vision Bot (Proof of Concept)
+# Computer Vision Bot (Proof of Concept)
 
 This repository contains a single Python script (`main.py`) that demonstrates the application of computer vision (OpenCV) and GUI automation (`pyautogui`) in a simulated, isometric grid environment. 
 
 ## ⚠️ Legal & Educational Disclaimer
 
-**This project is strictly for educational and research purposes.** * **No Affiliation:** This project is not affiliated with, endorsed by, or connected to Supercell or the game *Hay Day*. All game titles, images, and mechanics are the intellectual property of their respective owners.
-* **Terms of Service:** Using automation tools, macros, or bots in *Hay Day* is a direct violation of Supercell's Terms of Service. Using this code on your actual account **will likely result in a permanent ban**.
+**This project is strictly for educational and research purposes.**
 * **No Distribution of Assets:** This repository only contains the logical Python script. It does **not** contain any proprietary game assets, images, or template files required to run the script.
 * **As-Is:** This code is provided as a programming experiment to demonstrate multi-scale template matching and isometric coordinate mathematics. It is not a commercial product.
-
-**By downloading or viewing this code, you agree that the author is not responsible for any account bans, damages, or legal repercussions that result from your use of this software.**
 
 ---
 
