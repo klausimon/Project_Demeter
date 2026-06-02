@@ -1,4 +1,4 @@
-# Hay Day Computer Vision Bot (Proof of Concept)
+# Computer Vision Bot (Proof of Concept)
 
 This repository contains a single Python script (`main.py`) that demonstrates the application of computer vision (OpenCV) and GUI automation (`pyautogui`) in a simulated, isometric grid environment. 
 
